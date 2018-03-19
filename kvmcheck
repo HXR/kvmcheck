@@ -49,7 +49,7 @@ check_kvm_amd() {
   if [[ $(lsmod | grep -m 1 -E -c '(^kvm_amd)') -ne 0 ]]; then
     ok "KVM kernel module loaded"
   else
-    error "Error: kvm_amd kernal module not loaded"
+    error "Error: kvm_amd kernal module not loaded - Check BIOS"
   fi
   if [[ -d "/sys/module/kvm_amd" ]]; then
     # Interrupt Virtualization
@@ -92,7 +92,7 @@ check_kvm_intel() {
   if [[ $(lsmod | grep -m 1 -E -c '(^kvm_intel)') -ne 0 ]]; then
     ok "KVM kernel module loaded"
   else
-    error "Error: kvm_intel kernal module not loaded"
+    error "Error: kvm_intel kernal module not loaded - Check BIOS"
   fi
   if [[ -d "/sys/module/kvm_intel" ]]; then
     # Interrupt Virtualization
