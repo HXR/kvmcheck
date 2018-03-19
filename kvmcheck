@@ -94,19 +94,23 @@ check_kvm_intel() {
   else
     error "Error: kvm_intel kernal module not loaded"
   fi
-  # Interrupt Virtualization
-  # https://en.wikipedia.org/wiki/APICv#Interrupt_virtualization_(AMD_AVIC_and_Intel_APICv)
-  if [[ $(grep -c Y /sys/module/kvm_intel/parameters/enable_apicv) -ne 0 ]]; then
-    ok "Interrupt Virtualization enabled"
+  if [[ -d "/sys/module/kvm_intel" ]]; then
+    # Interrupt Virtualization
+    # https://en.wikipedia.org/wiki/APICv#Interrupt_virtualization_(AMD_AVIC_and_Intel_APICv)
+    if [[ $(grep -c Y /sys/module/kvm_intel/parameters/enable_apicv) -ne 0 ]]; then
+      ok "Interrupt Virtualization enabled"
+    else
+      error "Error: Intel APICv not enabled"
+    fi
+    # Nested Virtualization
+    # https://en.wikipedia.org/wiki/Nested_virtualization#Nested_virtualization
+    if [[ $(grep -c Y /sys/module/kvm_intel/parameters/nested) -ne 0 ]]; then
+      ok "Nested Virtualization enabled"
+    else
+      warn "Nested Virtualization disabled"
+    fi
   else
-    error "Error: Intel APICv not enabled"
-  fi
-  # Nested Virtualization
-  # https://en.wikipedia.org/wiki/Nested_virtualization#Nested_virtualization
-  if [[ $(grep -c Y /sys/module/kvm_intel/parameters/nested) -ne 0 ]]; then
-    ok "Nested Virtualization enabled"
-  else
-    warn "Nested Virtualization disabled"
+    error "Error: unable to access kernal parameters"
   fi
 }
 
