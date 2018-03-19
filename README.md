@@ -1,7 +1,7 @@
 # kvmcheck
 Utility for verifiyng hardware enablement for KVM
 
-/WARNING/: Don't parse output - It will change
+*WARNING*: Don't parse output - It will change
 
 ## Usage
 ```
@@ -24,4 +24,4 @@ None
 - [ ] Improve CPU support
 
 ## Addendum
-Alternative to (kvm-ok)[https://launchpad.net/cpu-checker]
+Alternative to [kvm-ok](https://launchpad.net/cpu-checker)
