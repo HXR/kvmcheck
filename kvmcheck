@@ -17,6 +17,28 @@
 
 VERSION="0.1"
 
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+        -r|--report)
+        if [ -z "$2" ]; then
+            REPORT=1
+        else
+            REPORT="$2"
+            shift # remember to shift the argument too
+        fi
+        shift
+        ;;
+    esac
+done
+set -- "${POSITIONAL[@]}"
+
+if [[ "$REPORT" -eq 1 || ! -z "$REPORT" ]]; then
+    echo "Reporting not implemented yet"
+    exit 0
+fi
+
 LSCPU="${LSCPU:-$(which lscpu)}"
 LSCPU_output="$($LSCPU)"
 
@@ -198,7 +220,7 @@ fi
 modules+=($module)
 
 read -d '' yaml <<- EOF
-# kvmcheck v$version
+# kvmcheck v$VERSION
 # Run 'kvmcheck --report $file' for more details
 
 - os: $os
