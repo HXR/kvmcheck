@@ -15,8 +15,16 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+VERSION="0.1"
+
 LSCPU="${LSCPU:-$(which lscpu)}"
-LSCPU_output=$($LSCPU)
+LSCPU_output="$($LSCPU)"
+
+LSBRELEASE="${LSBRELEASE:-$(which lsb_release)}"
+LSBRELEASE_output="$($LSBRELEASE -a)"
+
+declare -a flags
+declare -a modules
 
 ok() {
   printf "%s\\n" "$(tput setaf 2)$*$(tput sgr0)"
@@ -26,6 +34,11 @@ warn() {
 }
 error() {
   printf "%s\\n" "$(tput bold; tput setaf 1)$*$(tput sgr0)" >&2
+}
+
+split_read() {
+    grep '^'"$2"'' <<< "$1" | awk '{for(i='"${3:-2}"'+1;i<=NF;i++) printf("%s%s",$i,i==NF?RS:OFS);}'
+    return
 }
 
 check_cpu_flag() {
@@ -39,39 +52,49 @@ check_kvm_amd() {
   # https://en.wikipedia.org/wiki/X86_virtualization#Central_processing_unit
   # Virtualization: AMD-V
   # SVM: Secure Virtual Machine
-  if [[ $(check_cpu_flag "svm") -ne 0 ]]; then
+  flag=("svm;$(check_cpu_flag 'svm')")
+  if [[ ${flag##*;} -ne 0 ]]; then
     ok "CPU supports Hardware Virtualization"
   else
     error "Error: Support for 'AMD-V' CPU extension not found - Check specifications"
     exit 1
   fi
+  flags+=($flag)
   # Check: KVM kernel module loaded
-  if [[ $(lsmod | grep -m 1 -E -c '(^kvm_amd)') -ne 0 ]]; then
+  module="kvm_amd;$(lsmod | grep -m 1 -e -c '(^kvm_amd)')"
+  if [[ ${module##*;} -ne 0 ]]; then
     ok "KVM kernel module loaded"
   else
     error "Error: kvm_amd kernal module not loaded - Check BIOS"
   fi
+  modules+=($module)
   if [[ -d "/sys/module/kvm_amd" ]]; then
     # Interrupt Virtualization
     # https://en.wikipedia.org/wiki/APICv#Interrupt_virtualization_(AMD_AVIC_and_Intel_APICv)
-    if [[ $(cat /sys/module/kvm_amd/parameters/avic) -ne 0 ]]; then
+    flag="avic;$(cat /sys/module/kvm_amd/parameters/avic)"
+    if [[ ${flag##*;} -ne 0 ]]; then
       ok "Interrupt Virtualization enabled"
     else
       error "Error: AMD AVIC not enabled - try: 'modprobe kvm_amd avic=1'"
     fi
+    flags+=($flag)
     # Nested Virtualization
     # https://en.wikipedia.org/wiki/Nested_virtualization#Nested_virtualization
-    if [[ $(cat /sys/module/kvm_amd/parameters/nested) -ne 0 ]]; then
+    flag="nested;$(cat /sys/module/kvm_amd/parameters/nested)"
+    if [[ ${flag##*;} -ne 0 ]]; then
       ok "Nested Virtualization enabled"
     else
       warn "Nested Virtualization disabled"
     fi
+    flags+=($flag)
     # Nested Page Tables
-    if [[ $(cat /sys/module/kvm_amd/parameters/npt) -ne 0 ]]; then
+    flag="npt;$(cat /sys/module/kvm_amd/parameters/npt)"
+    if [[ ${flag##*;} -ne 0 ]]; then
       ok "Nested Virtualization enabled"
     else
       warn "Nested Page Tables disabled"
     fi
+    flags+=($flag)
   else
     error "Error: unable to access kernal parameters"
   fi
@@ -82,33 +105,41 @@ check_kvm_intel() {
   # https://en.wikipedia.org/wiki/X86_virtualization#Central_processing_unit
   # Virtualization: VT-x
   # VMX: Virtual Machine Extensions
-  if [[ $(check_cpu_flag "vmx") -ne 0 ]]; then
+  flag="vmx;$(check_cpu_flag 'vmx')"
+  if [[ ${flag##*;} -ne 0 ]]; then
     ok "CPU supports Hardware Virtualization"
   else
     error "Error: Support for 'VT-x' CPU extension not found - Check specifications"
     exit 1
   fi
+  flags+=($flag)
   # Check: KVM kernel module loaded
-  if [[ $(lsmod | grep -m 1 -E -c '(^kvm_intel)') -ne 0 ]]; then
+  module="kvm_intel;$(lsmod | grep -m 1 -E -c '(^kvm_intel)')"
+  if [[ ${module##*;} -ne 0 ]]; then
     ok "KVM kernel module loaded"
   else
-    error "Error: kvm_intel kernal module not loaded - Check BIOS"
+    error "Error: kvm_intel kernel module not loaded - Check BIOS"
   fi
+  modules+=($module)
   if [[ -d "/sys/module/kvm_intel" ]]; then
     # Interrupt Virtualization
     # https://en.wikipedia.org/wiki/APICv#Interrupt_virtualization_(AMD_AVIC_and_Intel_APICv)
-    if [[ $(grep -c Y /sys/module/kvm_intel/parameters/enable_apicv) -ne 0 ]]; then
+    flag="apicv;$(grep -c Y /sys/module/kvm_intel/parameters/enable_apicv)"
+    if [[ ${flag##*;} -ne 0 ]]; then
       ok "Interrupt Virtualization enabled"
     else
       error "Error: Intel APICv not enabled"
     fi
+    flags+=($flag)
     # Nested Virtualization
     # https://en.wikipedia.org/wiki/Nested_virtualization#Nested_virtualization
-    if [[ $(grep -c Y /sys/module/kvm_intel/parameters/nested) -ne 0 ]]; then
+    flag="nested;$(grep -c Y /sys/module/kvm_intel/parameters/nested)"
+    if [[ ${flag##*;} -ne 0 ]]; then
       ok "Nested Virtualization enabled"
     else
       warn "Nested Virtualization disabled"
     fi
+    flags+=($flag)
   else
     error "Error: unable to access kernal parameters"
   fi
@@ -117,6 +148,9 @@ check_kvm_intel() {
 ################################
 
 echo "$(tput sgr 0 1)Verifiyng hardware enablement for KVM$(tput sgr0)"
+
+cpu_model=$(split_read "$LSCPU_output" "Model name:")
+os=$(split_read "$LSBRELEASE_output" "Description:" 1)
 
 if [[ "$(grep '^Vendor\ ID:' <<<"$LSCPU_output" | grep -c -i 'Intel' )" -ne 0 ]]; then
   cpu_vendor="intel"
@@ -133,11 +167,13 @@ case $cpu_vendor in
 esac
 
 # Check for 64-bit support
-if [[ $(check_cpu_flag "lm") -ne 0 ]]; then
+flag="x86_64;$(check_cpu_flag 'lm')"
+if [[ ${flag##*;} -ne 0 ]]; then
   ok "64-bit support enabled"
 else
   warn "Warning: Enable 64-bit support for improved performance"
 fi
+flags+=($flag)
 
 # Check: /dev/kvm permissions
 if [[ -c "/dev/kvm" ]]; then
@@ -153,10 +189,28 @@ fi
 
 # I/O MMU Virtualization
 # https://en.wikipedia.org/wiki/X86_virtualization#I/O_MMU_virtualization_(AMD-Vi_and_Intel_VT-d)
-if [[ $(find /sys 2>&1 /dev/null | grep -m 1 -c dmar) -ne 0 ]]; then
+module="iommu;$(find /sys 2>&1 /dev/null | grep -m -1 -c dmar)"
+if [[ ${module##*;} -ne 0 ]]; then
   ok "I/O MMU Virtualization Enabled"
 else
   error "Error: I/O MMU Virtualization not enabled"
 fi
+modules+=($module)
+
+read -d '' yaml <<- EOF
+# kvmcheck v$version
+# Run 'kvmcheck --report $file' for more details
+
+- os: $os
+  kernel: $(uname -r)
+  vendor: $cpu_vendor
+  cpu: $cpu_model
+  modules:
+$(for i in "${modules[@]}"; do printf "%s%s: %s\n" "  - " "${i%%;*}" "${i##*;}"; done)
+  flags:
+$(for i in "${flags[@]}"; do printf "%s%s: %s\n" "  - " "${i%%;*}" "${i##*;}"; done)
+EOF
+
+echo "$yaml"
 
 exit 0
