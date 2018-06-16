@@ -15,29 +15,79 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-VERSION="0.1"
+# Set the HELP text
+read -d '' help <<- EOF
+Usage: kvmcheck [-h|--help] [-p|--print] [-r|--report {kvmcheck.yaml}]
 
+Utility for verifying hardware enablement for KVM.
+
+Optional Arguments:
+    -h, --help          Show this help message and exit
+    -p, --print         Print the resulting yaml output
+    -r, --report        Output yaml to a file. Default is kvmcheck.yaml
+
+EOF
+
+VERSION="0.1.1"
+
+FILE="kvmcheck.yml"
+
+# Some common printing functions
+
+confirm() {
+    read -r -p "${1:-Are you sure? [y/N]} " response
+    case "$response" in
+        [yY][eE][sS]|[yY])
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+ok() {
+  printf "%s\\n" "$(tput setaf 2)$*$(tput sgr0)"
+}
+warn() {
+  printf "%s\\n" "$(tput setaf 3)$*$(tput sgr0)" >&2
+}
+error() {
+  printf "%s\\n" "$(tput bold; tput setaf 1)$*$(tput sgr0)" >&2
+}
+abort() {
+    error "Aborting!"
+    exit 1
+}
+
+# Shift through keywords
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
         -r|--report)
-        if [ -z "$2" ]; then
             REPORT=1
-        else
-            REPORT="$2"
-            shift # remember to shift the argument too
-        fi
-        shift
-        ;;
+            if [[ ! -z "$2"  && ! "$2" =~ ^[-]+ ]]; then
+                FILE="$2"
+                # Remember to shift the argument too
+                shift
+            fi
+            ;;
+        -p|--print)
+            PRINT=1
+            ;;
+        -h|--help)
+            echo "$help"
+            exit 0
+            ;;
+        *)
+            error "$key is invalid"
+            printf "\n$help"
+            abort
+            ;;
     esac
+    shift
 done
 set -- "${POSITIONAL[@]}"
-
-if [[ "$REPORT" -eq 1 || ! -z "$REPORT" ]]; then
-    echo "Reporting not implemented yet"
-    exit 0
-fi
 
 LSCPU="${LSCPU:-$(which lscpu)}"
 LSCPU_output="$($LSCPU)"
@@ -48,15 +98,6 @@ LSBRELEASE_output="$($LSBRELEASE -a)"
 declare -a flags
 declare -a modules
 
-ok() {
-  printf "%s\\n" "$(tput setaf 2)$*$(tput sgr0)"
-}
-warn() {
-  printf "%s\\n" "$(tput setaf 3)$*$(tput sgr0)" >&2
-}
-error() {
-  printf "%s\\n" "$(tput bold; tput setaf 1)$*$(tput sgr0)" >&2
-}
 
 split_read() {
     grep '^'"$2"'' <<< "$1" | awk '{for(i='"${3:-2}"'+1;i<=NF;i++) printf("%s%s",$i,i==NF?RS:OFS);}'
@@ -221,7 +262,7 @@ modules+=($module)
 
 read -d '' yaml <<- EOF
 # kvmcheck v$VERSION
-# Run 'kvmcheck --report $file' for more details
+# Run 'kvmcheck --report $FILE' for more details
 
 - os: $os
   kernel: $(uname -r)
@@ -233,6 +274,30 @@ $(for i in "${modules[@]}"; do printf "%s%s: %s\n" "  - " "${i%%;*}" "${i##*;}";
 $(for i in "${flags[@]}"; do printf "%s%s: %s\n" "  - " "${i%%;*}" "${i##*;}"; done)
 EOF
 
-echo "$yaml"
+
+if [[ "$PRINT" -eq 1 || ! -z "$PRINT" ]]; then
+    echo ""
+    ok "Printing output:"
+    echo "$yaml"
+fi
+
+if [[ "$REPORT" -eq 1 || ! -z "$REPORT" ]]; then
+    echo ""
+    if [[ ! -f "$FILE" ]]; then
+        if [[ -L "$FILE" ]]; then
+            error "The output file seems to be a broken symlink: $FILE"
+            confirm "Overwrite the symlink? [y/N]" || abort
+        elif [[ -d "$FILE" ]]; then
+            error "The output file seems to be a directory: $FILE"
+            confirm "Output to "$FILE"/kvmcheck.yml? [y/N]" || abort
+            $FILE="$FILE/kvmcheck.yml"
+        fi
+    else
+        error "File exists! $FILE"
+        confirm "Overwrite? [y/N]" || abort
+    fi
+    ok "Writing output report to: $FILE"
+    echo "$yaml" >| "$FILE"
+fi
 
 exit 0
