@@ -143,11 +143,11 @@ check_kvm_amd() {
   fi
   flags+=($flag)
   # Check: KVM kernel module loaded
-  module="kvm_amd;$(lsmod | grep -m 1 -e -c '(^kvm_amd)')"
+  module="kvm_amd;$(lsmod | grep -m 1 -E -c '(^kvm_amd)')"
   if [[ ${module##*;} -ne 0 ]]; then
     ok "KVM kernel module loaded"
   else
-    error "Error: kvm_amd kernal module not loaded - Check BIOS"
+    error "Error: kvm_amd kernel module not loaded - Check BIOS"
   fi
   modules+=($module)
   if [[ -d "/sys/module/kvm_amd" ]]; then
@@ -178,7 +178,7 @@ check_kvm_amd() {
     fi
     flags+=($flag)
   else
-    error "Error: unable to access kernal parameters"
+    error "Error: unable to access kernel parameters"
   fi
 }
 
@@ -223,7 +223,7 @@ check_kvm_intel() {
     fi
     flags+=($flag)
   else
-    error "Error: unable to access kernal parameters"
+    error "Error: unable to access kernel parameters"
   fi
 }
 
