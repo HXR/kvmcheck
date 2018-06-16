@@ -17,18 +17,18 @@
 
 # Set the HELP text
 read -d '' help <<- EOF
-Usage: kvmcheck [-h|--help] [-p|--print] [-r|--report {kvmcheck.yaml}]
+Usage: kvmcheck [-p|--print] [-r|--report {kvmcheck.yaml}] [-d|--debug] [-h|--help]
 
 Utility for verifying hardware enablement for KVM.
 
 Optional Arguments:
-    -h, --help          Show this help message and exit
-    -p, --print         Print the resulting yaml output
+    -p, --print         Print the resulting yaml output, silences all other output
     -r, --report        Output yaml to a file. Default is kvmcheck.yaml
-
+    -d, --debug         Print debug information
+    -h, --help          Show this help message and exit
 EOF
 
-VERSION="0.1.1"
+VERSION="0.1.2"
 
 FILE="kvmcheck.yml"
 
@@ -45,18 +45,36 @@ confirm() {
             ;;
     esac
 }
+print() {
+    if [[ -z "$PRINT" || ! -z "$DEBUG" ]]; then
+        printf "$@"
+    fi
+}
+heading() {
+    print "%s\\n" "$(tput sgr 0 1)$*$(tput sgr0)"
+}
 ok() {
-  printf "%s\\n" "$(tput setaf 2)$*$(tput sgr0)"
+    print "%s\\n" "$(tput setaf 2)$*$(tput sgr0)"
 }
 warn() {
-  printf "%s\\n" "$(tput setaf 3)$*$(tput sgr0)" >&2
+    print "%s\\n" "$(tput setaf 3)$*$(tput sgr0)" >&2
 }
 error() {
-  printf "%s\\n" "$(tput bold; tput setaf 1)$*$(tput sgr0)" >&2
+    print "%s\\n" "$(tput bold; tput setaf 1)$*$(tput sgr0)" >&2
 }
 abort() {
     error "Aborting!"
     exit 1
+}
+
+usage(){
+    echo "$help"
+    exit ${1:-1}
+}
+
+isarg() {
+    # Check if value exists and starts with a hyphen
+    [[ ! -z "$1" && ! "$1" =~ ^[-]+ ]] && return 1 || return 0
 }
 
 # Shift through keywords
@@ -66,7 +84,7 @@ while [[ $# -gt 0 ]]; do
     case $key in
         -r|--report)
             REPORT=1
-            if [[ ! -z "$2"  && ! "$2" =~ ^[-]+ ]]; then
+            if ! isarg "$2"; then
                 FILE="$2"
                 # Remember to shift the argument too
                 shift
@@ -76,13 +94,15 @@ while [[ $# -gt 0 ]]; do
             PRINT=1
             ;;
         -h|--help)
-            echo "$help"
-            exit 0
+            usage 0
+            ;;
+        -d|--debug)
+            DEBUG=1
             ;;
         *)
-            error "$key is invalid"
-            printf "\n$help"
-            abort
+            error "Invalid Option: $key"
+            echo ""
+            usage
             ;;
     esac
     shift
@@ -97,7 +117,6 @@ LSBRELEASE_output="$($LSBRELEASE -a)"
 
 declare -a flags
 declare -a modules
-
 
 split_read() {
     grep '^'"$2"'' <<< "$1" | awk '{for(i='"${3:-2}"'+1;i<=NF;i++) printf("%s%s",$i,i==NF?RS:OFS);}'
@@ -210,7 +229,7 @@ check_kvm_intel() {
 
 ################################
 
-echo "$(tput sgr 0 1)Verifiyng hardware enablement for KVM$(tput sgr0)"
+heading "Verifying hardware enablement for KVM"
 
 cpu_model=$(split_read "$LSCPU_output" "Model name:")
 os=$(split_read "$LSBRELEASE_output" "Description:" 1)
@@ -276,13 +295,12 @@ EOF
 
 
 if [[ "$PRINT" -eq 1 || ! -z "$PRINT" ]]; then
-    echo ""
-    ok "Printing output:"
+    heading "Printing output:"
     echo "$yaml"
 fi
 
 if [[ "$REPORT" -eq 1 || ! -z "$REPORT" ]]; then
-    echo ""
+    heading "Outputting report"
     if [[ ! -f "$FILE" ]]; then
         if [[ -L "$FILE" ]]; then
             error "The output file seems to be a broken symlink: $FILE"
@@ -290,7 +308,7 @@ if [[ "$REPORT" -eq 1 || ! -z "$REPORT" ]]; then
         elif [[ -d "$FILE" ]]; then
             error "The output file seems to be a directory: $FILE"
             confirm "Output to "$FILE"/kvmcheck.yml? [y/N]" || abort
-            $FILE="$FILE/kvmcheck.yml"
+            [[ "$FILE" =~ /$ ]] && FILE+="kvmcheck.yml" || FILE+="/kvmcheck.yml"
         fi
     else
         error "File exists! $FILE"
