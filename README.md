@@ -5,21 +5,21 @@ Utility for verifiyng hardware enablement for KVM
 
 ## Usage
 ```
-./kvmcheck
+./kvmcheck -h
 ```
 
 ## NEWS
-0.0.1
-  'Good enough to commit' release!
+Check out the [Changelog](CHANGELOG.md) for recent updates.
 
 ## KNOWN BUGS
-None
+Check the [Issues](https://github.com/hxr/kvmcheck/issues)
 
 ## TODO
 - [ ] Add Makefile
 - [ ] Add Tests
+- [ ] Add Ranking
 - [ ] Improve output
-  - [ ] `--report` output
+  - [x] `--report` output
   - [ ] UX
 - [ ] Improve CPU support
 
